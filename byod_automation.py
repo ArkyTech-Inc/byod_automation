@@ -7,16 +7,18 @@ This script automates the device registration workflow:
 4. Schedules IT inspections
 """
 import os
-import time
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+import openpyxl
+import qrcode
+import smtplib
+import json
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
 from datetime import datetime, timedelta
 from io import BytesIO
-import openpyxl
-import qrcode
-import smtplib
-import json
+import os
 
 class BYODAutomation:
     def __init__(self, excel_file):
@@ -31,12 +33,8 @@ class BYODAutomation:
         self.smtp_server = self.get_setting('SMTP Server')
         self.smtp_port = int(self.get_setting('SMTP Port'))
         self.sender_email = self.get_setting('Sender Email')
-        self.sender_password = os.getenv('GMAIL_APP_PASSWORD', 'mvkd inaq hsyi kqnx')
         self.it_email = self.get_setting('IT Email')
         self.inspection_lead_time = int(self.get_setting('Inspection Lead Time (days)'))
-        
-        # Persistent SMTP connection
-        self.smtp_connection = None
         
     def get_setting(self, setting_name):
         """Retrieve setting value from Automation Settings sheet"""
@@ -55,69 +53,10 @@ class BYODAutomation:
                 }
         return None
     
-    def get_smtp_connection(self):
-        """Get or create persistent SMTP connection with retry logic"""
-        max_retries = 3
-        retry_count = 0
-        
-        while retry_count < max_retries:
-            try:
-                # Create fresh connection if needed
-                if self.smtp_connection is None:
-                    if self.smtp_port == 465:
-                        self.smtp_connection = smtplib.SMTP_SSL(
-                            self.smtp_server, 
-                            self.smtp_port, 
-                            timeout=30
-                        )
-                    else:
-                        self.smtp_connection = smtplib.SMTP(
-                            self.smtp_server, 
-                            self.smtp_port, 
-                            timeout=30
-                        )
-                        self.smtp_connection.ehlo()
-                        self.smtp_connection.starttls()
-                        self.smtp_connection.ehlo()
-                    
-                    self.smtp_connection.login(self.sender_email, self.sender_password)
-                    print(f"  \u2192 SMTP connection established")
-                    return self.smtp_connection
-                
-                # Verify existing connection is alive with NOOP
-                try:
-                    self.smtp_connection.noop()
-                    return self.smtp_connection
-                except:
-                    # Connection dead, reset it
-                    self.smtp_connection = None
-                    raise Exception("Connection lost, reconnecting...")
-                    
-            except Exception as e:
-                print(f"  \u26a0 SMTP connection error (attempt {retry_count + 1}/{max_retries}): {e}")
-                self.smtp_connection = None
-                retry_count += 1
-                
-                if retry_count < max_retries:
-                    time.sleep(2)  # Wait before retry
-        
-        raise Exception(f"Failed to connect to SMTP after {max_retries} attempts")
-    
-    def close_smtp_connection(self):
-        """Properly close SMTP connection"""
-        try:
-            if self.smtp_connection:
-                self.smtp_connection.quit()
-                print("  \u2192 SMTP connection closed")
-        except:
-            pass
-        finally:
-            self.smtp_connection = None
-
     def send_email(self, to_email, subject, body, attachment=None):
-        """Send email with optional attachment and retry logic"""
+        """Send email with optional attachment"""
         try:
-            msg = MIMEMultipart('alternative') if not attachment else MIMEMultipart()
+            msg = MIMEMultipart()
             msg['From'] = self.sender_email
             msg['To'] = to_email
             msg['Subject'] = subject
@@ -127,19 +66,22 @@ class BYODAutomation:
             if attachment:
                 msg.attach(attachment)
             
-            # Get SMTP connection
-            server = self.get_smtp_connection()
+            # Connect to SMTP server
+            #server = smtplib.SMTP(self.smtp_server, self.smtp_port) --previous smtp connection code
+            #server.starttls() --previous smtp connection code before changing to port 465
+            server = smtplib.SMTP_SSL(self.smtp_server, 465, timeout=15)
+            
+            # Note: In production, use secure credential storage
+            #Note: The password used here is from my google app password to link gmail.
+            server.login(self.sender_email, "mvkd inaq hsyi kqnx")
+            
             server.send_message(msg)
+            server.quit()
             
-            print(f"  \u2713 Email sent to {to_email}")
+            print(f"Email sent to {to_email}: {subject}")
             return True
-            
-        except smtplib.SMTPException as e:
-            print(f"  \u2717 SMTP error: {e}")
-            self.smtp_connection = None  # Reset on error
-            return False
         except Exception as e:
-            print(f"  \u2717 Email error: {e}")
+            print(f"Error sending email: {e}")
             return False
     
     def process_new_registrations(self):
@@ -216,148 +158,151 @@ class BYODAutomation:
         name = row[2].value
         department = row[3].value
         device_model = row[6].value
-        supervisor_name = row[12].value
         
         # Get approval server URL
-        # The server URL here is currently the ngrok URL. Change to public server URL when deployed.
+        # The server URL here is currently the ngrok URL. You should change to public server URL when deployed.
         server_url = "https://biostatical-penetratingly-gerri.ngrok-free.dev"
         approval_link = f"{server_url}/approve/{reg_id}"
         
         # Plain text version
-        text_body = f"""Dear {supervisor_name},
+        text_body = f"""Dear {row[12].value},
 
-A new BYOD registration requires your approval.
+    A new BYOD registration requires your approval.
 
-Intern's Name: {name}
-Department: {department}
-Device: {device_model}
-Registration ID: {reg_id}
+    Intern's Name: {name}
+    Department: {department}
+    Device: {device_model}
+    Registration ID: {reg_id}
 
-To approve or reject this device, please visit:
-{approval_link}
+    To approve or reject this device, please visit:
+    {approval_link}
 
-Best regards,
-NITDA BYOD System"""
+    Best regards,
+    NITDA BYOD System"""
         
         # HTML version with buttons
         html_body = f"""
-<!DOCTYPE html>
-<html>
-<head>
-    <style>
-        body {{
-            font-family: Arial, sans-serif;
-            line-height: 1.6;
-            color: #333;
-        }}
-        .container {{
-            max-width: 600px;
-            margin: 0 auto;
-            padding: 20px;
-        }}
-        .header {{
-            background: #00A86B;
-            color: white;
-            padding: 20px;
-            text-align: center;
-            border-radius: 8px 8px 0 0;
-        }}
-        .content {{
-            background: #f9f9f9;
-            padding: 30px;
-            border: 1px solid #ddd;
-            border-top: none;
-        }}
-        .info-box {{
-            background: white;
-            padding: 15px;
-            border-left: 4px solid #00A86B;
-            margin: 20px 0;
-        }}
-        .info-row {{
-            padding: 8px 0;
-            border-bottom: 1px solid #eee;
-        }}
-        .info-row:last-child {{
-            border-bottom: none;
-        }}
-        .label {{
-            font-weight: bold;
-            color: #666;
-            display: inline-block;
-            width: 150px;
-        }}
-        .button-container {{
-            text-align: center;
-            margin: 30px 0;
-        }}
-        .button {{
-            display: inline-block;
-            padding: 15px 40px;
-            margin: 10px;
-            text-decoration: none;
-            border-radius: 8px;
-            font-weight: bold;
-            font-size: 16px;
-            background: #00A86B;
-            color: white !important;
-        }}
-        .button:hover {{
-            background: #007850;
-        }}
-        .footer {{
-            text-align: center;
-            padding: 20px;
-            color: #666;
-            font-size: 12px;
-        }}
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>BYOD Approval Required</h1>
-        </div>
-        <div class="content">
-            <p>Dear {supervisor_name},</p>
-            <p>A new BYOD device registration requires your endorsement.</p>
-            
-            <div class="info-box">
-                <div class="info-row">
-                    <span class="label">Registration ID:</span>
-                    <span>{reg_id}</span>
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{
+                    font-family: Arial, sans-serif;
+                    line-height: 1.6;
+                    color: #333;
+                }}
+                .container {{
+                    max-width: 600px;
+                    margin: 0 auto;
+                    padding: 20px;
+                }}
+                .header {{
+                    background: #00A86B;
+                    color: white;
+                    padding: 20px;
+                    text-align: center;
+                    border-radius: 8px 8px 0 0;
+                }}
+                .content {{
+                    background: #f9f9f9;
+                    padding: 30px;
+                    border: 1px solid #ddd;
+                    border-top: none;
+                }}
+                .info-box {{
+                    background: white;
+                    padding: 15px;
+                    border-left: 4px solid #00A86B;
+                    margin: 20px 0;
+                }}
+                .info-row {{
+                    padding: 8px 0;
+                    border-bottom: 1px solid #eee;
+                }}
+                .info-row:last-child {{
+                    border-bottom: none;
+                }}
+                .label {{
+                    font-weight: bold;
+                    color: #666;
+                    display: inline-block;
+                    width: 150px;
+                }}
+                .button-container {{
+                    text-align: center;
+                    margin: 30px 0;
+                }}
+                .button {{
+                    display: inline-block;
+                    padding: 15px 40px;
+                    margin: 10px;
+                    text-decoration: none;
+                    border-radius: 8px;
+                    font-weight: bold;
+                    font-size: 16px;
+                }}
+                .approve-btn {{
+                    background: #00A86B;
+                    color: white !important;
+                }}
+                .approve-btn:hover {{
+                    background: #007850;
+                }}
+                .footer {{
+                    text-align: center;
+                    padding: 20px;
+                    color: #666;
+                    font-size: 12px;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>BYOD Approval Required</h1>
                 </div>
-                <div class="info-row">
-                    <span class="label">Intern's Name:</span>
-                    <span>{name}</span>
+                <div class="content">
+                    <p>Dear {row[12].value},</p>
+                    <p>A new BYOD device registration requires your endorsement.</p>
+                    
+                    <div class="info-box">
+                        <div class="info-row">
+                            <span class="label">Registration ID:</span>
+                            <span>{reg_id}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="label">Intern's Name:</span>
+                            <span>{name}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="label">Department:</span>
+                            <span>{department}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="label">Device:</span>
+                            <span>{device_model}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="button-container">
+                        <a href="{approval_link}" class="button approve-btn">
+                            ✓ REVIEW & APPROVE/REJECT
+                        </a>
+                    </div>
+                    
+                    <p style="text-align: center; color: #666; font-size: 14px;">
+                        Click the button above to review the complete device details<br>
+                        and approve or reject this registration.
+                    </p>
                 </div>
-                <div class="info-row">
-                    <span class="label">Department:</span>
-                    <span>{department}</span>
-                </div>
-                <div class="info-row">
-                    <span class="label">Device:</span>
-                    <span>{device_model}</span>
+                <div class="footer">
+                    <p>This is an automated email from NITDA BYOD Management System</p>
+                    <p>If you have any questions, please contact IT Support</p>
                 </div>
             </div>
-            
-            <div class="button-container">
-                <a href="{approval_link}" class="button">
-                    ✓ REVIEW & APPROVE/REJECT
-                </a>
-            </div>
-            
-            <p style="text-align: center; color: #666; font-size: 14px;">
-                Click the button above to review and approve/reject this registration.
-            </p>
-        </div>
-        <div class="footer">
-            <p>This is an automated email from NITDA BYOD Management System</p>
-        </div>
-    </div>
-</body>
-</html>
-"""
+        </body>
+        </html>
+        """
         
         # Create message with both plain text and HTML
         try:
@@ -366,19 +311,25 @@ NITDA BYOD System"""
             msg['To'] = supervisor_email
             msg['Subject'] = f'BYOD Approval Required - {name}'
             
+            # Attach both versions
             part1 = MIMEText(text_body, 'plain')
             part2 = MIMEText(html_body, 'html')
             msg.attach(part1)
             msg.attach(part2)
             
-            server = self.get_smtp_connection()
+            # Send email
+            import smtplib
+            #server = smtplib.SMTP(self.smtp_server, self.smtp_port)
+            #server.starttls()
+            server = smtplib.SMTP_SSL(self.smtp_server, 465, timeout=15)
+            server.login(self.sender_email, "mvkd inaq hsyi kqnx")
             server.send_message(msg)
+            server.quit()
             
-            print(f"  \u2713 Approval email sent to {supervisor_email}")
+            print(f"Approval email sent to {supervisor_email}")
             return True
         except Exception as e:
-            print(f"  \u2717 Approval email error: {e}")
-            self.smtp_connection = None
+            print(f"Error sending approval email: {e}")
             return False
 
 
@@ -388,9 +339,10 @@ NITDA BYOD System"""
     def process_approved_devices(self):
         """Process approved devices and schedule IT inspections"""
         processed_count = 0
-        
+
+           # Verify inspections sheet exists
         if not hasattr(self, 'inspections') or self.inspections is None:
-            print("  \u2717 Inspections sheet not initialized")
+            print("ERROR: inspections sheet not initialized")
             return 0
         
         for row in self.registrations.iter_rows(min_row=2, values_only=False):
@@ -411,30 +363,33 @@ NITDA BYOD System"""
                     # Add to IT Inspection sheet
                     self.add_inspection_record(row, inspection_date)
                     
+                    # Send notification to user
                     template = self.get_email_template('IT Inspection Schedule')
-                    if template:
-                        email_body = template['body'].format(
-                            name=row[2].value,
-                            registration_id=reg_id,
-                            device_model=row[6].value,
-                            inspection_date=inspection_date.strftime('%Y-%m-%d')
-                        )
-                        
-                        user_email = row[10].value
-                        if user_email:
-                            subject = template['subject'].format(registration_id=reg_id)
-                            self.send_email(user_email, subject, email_body)
+                    email_body = template['body'].format(
+                        name=row[2].value,
+                        registration_id=reg_id,
+                        device_model=row[6].value,
+                        inspection_date=inspection_date.strftime('%Y-%m-%d')
+                    )
                     
+                    user_email = row[10].value
+                    if user_email:
+                        subject = template['subject'].format(registration_id=reg_id)
+                        self.send_email(user_email, subject, email_body)
+                    
+                    # Notify IT department
                     it_notification = f"""New device scheduled for inspection:
-
+                    
 Registration ID: {reg_id}
 Name: {row[2].value}
 Device: {row[6].value}
 Scheduled: {inspection_date.strftime('%Y-%m-%d')}
 
-Contact: {row[10].value}"""
-                    
-                    self.send_email(self.it_email, f'New Inspection - {reg_id}', it_notification)
+Please contact the user at {row[10].value} to confirm inspection time.
+"""
+                    self.send_email(self.it_email, 
+                                  f'New Inspection Scheduled - {reg_id}',
+                                  it_notification)
                     
                     processed_count += 1
         
@@ -450,25 +405,38 @@ Contact: {row[10].value}"""
     def add_inspection_record(self, reg_row, inspection_date):
         """Add new inspection record"""
         next_row = self.inspections.max_row + 1
+        
+        self.inspections.cell(row=next_row, column=1).value = reg_row[0].value  # Reg ID
+        self.inspections.cell(row=next_row, column=2).value = reg_row[2].value  # Name
+        self.inspections.cell(row=next_row, column=3).value = reg_row[6].value  # Device Model
+        self.inspections.cell(row=next_row, column=4).value = reg_row[9].value  # Serial Number
+
+        #Inspection ID (added for the automation to propagate, just next line of inspection_id)
         inspection_id = f"INS-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-        
-        self.inspections.cell(row=next_row, column=1).value = reg_row[0].value
-        self.inspections.cell(row=next_row, column=2).value = reg_row[2].value
-        self.inspections.cell(row=next_row, column=3).value = reg_row[6].value
-        self.inspections.cell(row=next_row, column=4).value = reg_row[9].value
-        self.inspections.cell(row=next_row, column=5).value = inspection_id
+        self.inspections.cell(row=next_row, column=5).value =inspection_id
+       # self.inspections.cell(row=next_row, column=5).value = f"INS-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        #Inspection Date
         self.inspections.cell(row=next_row, column=6).value = inspection_date.strftime('%Y-%m-%d')
+        #Inspected By ?(left Empty and should be filled by the IT officer inspecting)
         self.inspections.cell(row=next_row, column=7).value = ''
-        
+
+        #Checkboxes (columns 8-13 are left empty too)
         for col in range(8, 14):
             self.inspections.cell(row=next_row, column=col).value = ''
         
+        #Compliance Status        
         self.inspections.cell(row=next_row, column=14).value = 'Pending'
+
+        #Remarks(Column 15)
         self.inspections.cell(row=next_row, column=15).value = ''
+
+        #QR Code Generated(Column 16)
         self.inspections.cell(row=next_row, column=16).value = 'No'
+
+        #Pass Issue Date(Column 17)
         self.inspections.cell(row=next_row, column=17).value = ''
-        
-        print(f"  \u2192 Created IT Inspection: {inspection_id}")
+
+        print(f"Created IT Inspection Record : {inspection_id}")
 
     def generate_qr_code(self, reg_id, device_info):
         """Generate QR code for device pass"""
@@ -572,43 +540,45 @@ Contact: {row[10].value}"""
     def save_changes(self):
         """Save all changes to Excel file"""
         self.wb.save(self.excel_file)
-        print("  \u2192 Changes saved")
+        print("Changes saved to Excel file")
     
     def run_automation(self):
         """Run all automation processes"""
         print("=" * 60)
-        print("NITDA BYOD Automation - Running")
+        print("NITDA BYOD Automation System - Running")
         print("=" * 60)
         
-        try:
-            print("\n1. Processing new registrations...")
-            new_regs = self.process_new_registrations()
-            print(f"   ✓ Processed {new_regs} registrations\n")
-            
-            print("2. Processing approved devices...")
-            approved = self.process_approved_devices()
-            print(f"   ✓ Scheduled {approved} inspections\n")
-            
-            print("3. Generating QR codes...")
-            qr_codes = self.process_compliant_devices()
-            print(f"   ✓ Generated {qr_codes} QR codes\n")
-            
-            print("4. Saving changes...")
-            self.save_changes()
-            
-        finally:
-            self.close_smtp_connection()
+        # Process new registrations
+        print("\n1. Processing new registrations...")
+        new_regs = self.process_new_registrations()
+        print(f"   Processed {new_regs} new registrations")
+        
+        # Process approved devices
+        print("\n2. Processing approved devices...")
+        approved = self.process_approved_devices()
+        print(f"   Scheduled {approved} IT inspections")
+        
+        # Process compliant devices
+        print("\n3. Generating QR codes for compliant devices...")
+        qr_codes = self.process_compliant_devices()
+        print(f"   Generated {qr_codes} QR code passes")
+        
+        # Save changes
+        print("\n4. Saving changes...")
+        self.save_changes()
         
         print("\n" + "=" * 60)
-        print("✓ Automation completed successfully!")
+        print("Automation completed successfully!")
         print("=" * 60)
 
 
 # Main execution
 if __name__ == "__main__":
+    # Initialize automation system
     automation = BYODAutomation('NITDA_BYOD_Database.xlsx')
     
-    try:
-        automation.run_automation()
-    finally:
-        automation.close_smtp_connection()
+    # Run automation
+    automation.run_automation()
+    
+    print("\n\nNOTE: Email functionality requires SMTP credentials.")
+    print("Update the send_email() method with your SMTP credentials before deployment.")
