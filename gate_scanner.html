@@ -1,0 +1,1084 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>NITDA — Security Gate</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Sora:wght@300;400;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --green: #00C97A;
+      --green-dim: #007A4A;
+      --red: #FF4C4C;
+      --red-dim: #8B1A1A;
+      --amber: #FFB800;
+      --bg: #0A0F0D;
+      --surface: #111815;
+      --surface2: #182119;
+      --border: #1E2E25;
+      --text: #E8F5EE;
+      --muted: #5A7A68;
+      --mono: 'Share Tech Mono', monospace;
+      --sans: 'Sora', sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Scanline overlay */
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,0,0,0.04) 2px,
+        rgba(0,0,0,0.04) 4px
+      );
+      pointer-events: none;
+      z-index: 9999;
+    }
+
+    /* ── HEADER ─────────────────────────────────────── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 32px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      flex-shrink: 0;
+    }
+
+    .logo-area {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .logo-mark {
+      width: 40px;
+      height: 40px;
+      border: 2px solid var(--green);
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--green);
+      letter-spacing: 0.5px;
+      line-height: 1.2;
+      text-align: center;
+    }
+
+    .logo-text h1 {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: var(--text);
+    }
+
+    .logo-text p {
+      font-size: 11px;
+      color: var(--muted);
+      font-family: var(--mono);
+      letter-spacing: 0.08em;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+    }
+
+    .live-clock {
+      font-family: var(--mono);
+      font-size: 22px;
+      color: var(--green);
+      letter-spacing: 0.08em;
+    }
+
+    .live-date {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--muted);
+      text-align: right;
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 8px var(--green);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* ── MAIN LAYOUT ─────────────────────────────────── */
+    main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 420px;
+      gap: 0;
+      overflow: hidden;
+    }
+
+    /* ── LEFT PANEL ──────────────────────────────────── */
+    .left-panel {
+      padding: 40px 48px;
+      display: flex;
+      flex-direction: column;
+      gap: 32px;
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+    }
+
+    /* Mode selector */
+    .mode-label {
+      font-size: 11px;
+      font-family: var(--mono);
+      color: var(--muted);
+      letter-spacing: 0.12em;
+      margin-bottom: 12px;
+    }
+
+    .mode-toggle {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .mode-btn {
+      padding: 18px;
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      background: var(--surface2);
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--sans);
+    }
+
+    .mode-btn .mode-icon {
+      font-size: 28px;
+    }
+
+    .mode-btn .mode-name {
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+    }
+
+    .mode-btn .mode-sub {
+      font-size: 10px;
+      font-family: var(--mono);
+      color: var(--muted);
+    }
+
+    .mode-btn.checkin {
+      border-color: transparent;
+      color: var(--muted);
+    }
+
+    .mode-btn.checkout {
+      border-color: transparent;
+      color: var(--muted);
+    }
+
+    .mode-btn.checkin.active {
+      border-color: var(--green);
+      background: rgba(0, 201, 122, 0.08);
+      color: var(--green);
+    }
+
+    .mode-btn.checkout.active {
+      border-color: var(--red);
+      background: rgba(255, 76, 76, 0.08);
+      color: var(--red);
+    }
+
+    .mode-btn:hover:not(.active) {
+      border-color: var(--border);
+      background: var(--surface);
+    }
+
+    /* Scan input area */
+    .scan-section { display: flex; flex-direction: column; gap: 12px; }
+
+    .scan-field-wrapper {
+      position: relative;
+    }
+
+    .scan-field-label {
+      font-size: 11px;
+      font-family: var(--mono);
+      color: var(--muted);
+      letter-spacing: 0.12em;
+      margin-bottom: 10px;
+    }
+
+    #scanInput {
+      width: 100%;
+      padding: 20px 24px;
+      background: var(--surface2);
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 18px;
+      letter-spacing: 0.1em;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    #scanInput:focus {
+      border-color: var(--green);
+      box-shadow: 0 0 0 3px rgba(0, 201, 122, 0.12);
+    }
+
+    #scanInput::placeholder {
+      color: var(--muted);
+      font-size: 14px;
+      letter-spacing: 0.04em;
+    }
+
+    .scan-hint {
+      font-size: 11px;
+      color: var(--muted);
+      font-family: var(--mono);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .scan-hint::before {
+      content: '›';
+      color: var(--green);
+    }
+
+    .submit-btn {
+      width: 100%;
+      padding: 18px;
+      background: var(--green);
+      color: #000;
+      border: none;
+      border-radius: 12px;
+      font-family: var(--sans);
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .submit-btn:hover {
+      background: #00E88A;
+      transform: translateY(-1px);
+    }
+
+    .submit-btn:active {
+      transform: translateY(0);
+    }
+
+    .submit-btn.checkout-mode {
+      background: var(--red);
+      color: #fff;
+    }
+
+    .submit-btn.checkout-mode:hover {
+      background: #FF6B6B;
+    }
+
+    /* Result card */
+    .result-card {
+      border-radius: 16px;
+      padding: 28px;
+      display: none;
+      flex-direction: column;
+      gap: 20px;
+      animation: slideUp 0.3s ease;
+    }
+
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .result-card.success {
+      display: flex;
+      background: rgba(0, 201, 122, 0.06);
+      border: 1px solid rgba(0, 201, 122, 0.3);
+    }
+
+    .result-card.error {
+      display: flex;
+      background: rgba(255, 76, 76, 0.06);
+      border: 1px solid rgba(255, 76, 76, 0.3);
+    }
+
+    .result-card.warning {
+      display: flex;
+      background: rgba(255, 184, 0, 0.06);
+      border: 1px solid rgba(255, 184, 0, 0.3);
+    }
+
+    .result-header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .result-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      font-size: 22px;
+      flex-shrink: 0;
+    }
+
+    .success .result-icon { background: rgba(0, 201, 122, 0.15); }
+    .error .result-icon { background: rgba(255, 76, 76, 0.15); }
+    .warning .result-icon { background: rgba(255, 184, 0, 0.15); }
+
+    .result-title {
+      font-size: 18px;
+      font-weight: 700;
+    }
+    .success .result-title { color: var(--green); }
+    .error .result-title { color: var(--red); }
+    .warning .result-title { color: var(--amber); }
+
+    .result-subtitle {
+      font-size: 12px;
+      font-family: var(--mono);
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    .result-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .result-field {
+      background: rgba(0,0,0,0.2);
+      border-radius: 8px;
+      padding: 12px 14px;
+    }
+
+    .result-field .field-label {
+      font-size: 10px;
+      font-family: var(--mono);
+      color: var(--muted);
+      letter-spacing: 0.1em;
+      margin-bottom: 4px;
+    }
+
+    .result-field .field-value {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .result-field.wide {
+      grid-column: 1 / -1;
+    }
+
+    .result-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-family: var(--mono);
+      font-weight: 600;
+      letter-spacing: 0.08em;
+    }
+
+    .badge-approved {
+      background: rgba(0, 201, 122, 0.15);
+      color: var(--green);
+      border: 1px solid rgba(0, 201, 122, 0.3);
+    }
+
+    .badge-rejected {
+      background: rgba(255, 76, 76, 0.15);
+      color: var(--red);
+      border: 1px solid rgba(255, 76, 76, 0.3);
+    }
+
+    .badge-pending {
+      background: rgba(255, 184, 0, 0.15);
+      color: var(--amber);
+      border: 1px solid rgba(255, 184, 0, 0.3);
+    }
+
+    /* ── RIGHT PANEL — LOG ───────────────────────────── */
+    .right-panel {
+      display: flex;
+      flex-direction: column;
+      background: var(--surface);
+      overflow: hidden;
+    }
+
+    .log-header {
+      padding: 24px 24px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .log-title {
+      font-size: 12px;
+      font-family: var(--mono);
+      color: var(--muted);
+      letter-spacing: 0.12em;
+    }
+
+    .log-count {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--green);
+    }
+
+    .log-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .log-list::-webkit-scrollbar { width: 4px; }
+    .log-list::-webkit-scrollbar-track { background: transparent; }
+    .log-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+    .log-entry {
+      padding: 14px 16px;
+      border-radius: 10px;
+      background: var(--surface2);
+      border-left: 3px solid transparent;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      animation: fadeIn 0.3s ease;
+      font-size: 13px;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateX(8px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+    .log-entry.in { border-left-color: var(--green); }
+    .log-entry.out { border-left-color: var(--red); }
+    .log-entry.denied { border-left-color: var(--amber); }
+
+    .log-entry-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .log-name {
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .log-action {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-weight: 700;
+    }
+
+    .log-entry.in .log-action { background: rgba(0,201,122,0.15); color: var(--green); }
+    .log-entry.out .log-action { background: rgba(255,76,76,0.15); color: var(--red); }
+    .log-entry.denied .log-action { background: rgba(255,184,0,0.15); color: var(--amber); }
+
+    .log-meta {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--muted);
+      display: flex;
+      gap: 12px;
+    }
+
+    .log-empty {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 2;
+    }
+
+    /* stats bar */
+    .stats-bar {
+      padding: 16px 20px;
+      border-top: 1px solid var(--border);
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+    }
+
+    .stat-item {
+      text-align: center;
+    }
+
+    .stat-value {
+      font-family: var(--mono);
+      font-size: 20px;
+      font-weight: 700;
+    }
+
+    .stat-label {
+      font-size: 9px;
+      font-family: var(--mono);
+      color: var(--muted);
+      letter-spacing: 0.1em;
+      margin-top: 2px;
+    }
+
+    .stat-item.ins .stat-value { color: var(--green); }
+    .stat-item.outs .stat-value { color: var(--red); }
+    .stat-item.denied-stat .stat-value { color: var(--amber); }
+
+    /* loading spinner */
+    .spinner {
+      width: 18px;
+      height: 18px;
+      border: 2px solid rgba(0,201,122,0.2);
+      border-top-color: var(--green);
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      display: none;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* sound wave visual */
+    .sound-wave {
+      display: none;
+      gap: 3px;
+      align-items: center;
+      height: 20px;
+    }
+
+    .sound-wave.playing { display: flex; }
+
+    .wave-bar {
+      width: 3px;
+      border-radius: 2px;
+      background: var(--green);
+    }
+
+    .wave-bar:nth-child(1) { animation: wave 0.8s 0.0s infinite; }
+    .wave-bar:nth-child(2) { animation: wave 0.8s 0.1s infinite; }
+    .wave-bar:nth-child(3) { animation: wave 0.8s 0.2s infinite; }
+    .wave-bar:nth-child(4) { animation: wave 0.8s 0.3s infinite; }
+    .wave-bar:nth-child(5) { animation: wave 0.8s 0.2s infinite; }
+
+    @keyframes wave {
+      0%, 100% { height: 4px; }
+      50% { height: 18px; }
+    }
+
+    /* connection status */
+    .conn-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      border: 1px solid;
+    }
+
+    .conn-badge.online {
+      color: var(--green);
+      border-color: rgba(0,201,122,0.3);
+      background: rgba(0,201,122,0.06);
+    }
+
+    .conn-badge.offline {
+      color: var(--amber);
+      border-color: rgba(255,184,0,0.3);
+      background: rgba(255,184,0,0.06);
+    }
+
+    .conn-badge .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .officer-info {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- HEADER -->
+  <header>
+    <div class="logo-area">
+      <div class="logo-mark">NIT<br>DA</div>
+      <div class="logo-text">
+        <h1>Security Gate Terminal</h1>
+        <p>BYOD ACCESS CONTROL SYSTEM</p>
+      </div>
+    </div>
+    <div class="header-right">
+      <div>
+        <div class="live-clock" id="clock">00:00:00</div>
+        <div class="live-date" id="dateDisplay">—</div>
+      </div>
+      <div class="status-dot" id="statusDot"></div>
+    </div>
+  </header>
+
+  <!-- MAIN -->
+  <main>
+
+    <!-- LEFT PANEL -->
+    <div class="left-panel">
+
+      <!-- Mode selection -->
+      <div>
+        <div class="mode-label">// SELECT GATE ACTION</div>
+        <div class="mode-toggle">
+          <button class="mode-btn checkin active" id="btnCheckin" onclick="setMode('in')">
+            <span class="mode-icon">↓</span>
+            <span class="mode-name">CHECK IN</span>
+            <span class="mode-sub">ENTERING PREMISES</span>
+          </button>
+          <button class="mode-btn checkout" id="btnCheckout" onclick="setMode('out')">
+            <span class="mode-icon">↑</span>
+            <span class="mode-name">CHECK OUT</span>
+            <span class="mode-sub">LEAVING PREMISES</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Scan input -->
+      <div class="scan-section">
+        <div class="scan-field-label">// SCAN OR TYPE QR CODE</div>
+        <div class="scan-field-wrapper">
+          <input
+            type="text"
+            id="scanInput"
+            placeholder="Click here, then scan QR code..."
+            autocomplete="off"
+            spellcheck="false"
+          />
+        </div>
+        <div class="scan-hint">Click the field above, then scan the device QR code</div>
+        <div style="display:flex; align-items:center; gap:12px;">
+          <button class="submit-btn" id="submitBtn" onclick="processQR()">
+            VERIFY &amp; LOG ENTRY
+          </button>
+          <div class="spinner" id="spinner"></div>
+          <div class="sound-wave" id="soundWave">
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Result card -->
+      <div class="result-card" id="resultCard">
+        <div class="result-header">
+          <div class="result-icon" id="resultIcon"></div>
+          <div>
+            <div class="result-title" id="resultTitle"></div>
+            <div class="result-subtitle" id="resultSubtitle"></div>
+          </div>
+        </div>
+        <div class="result-grid" id="resultGrid"></div>
+      </div>
+
+      <!-- Officer / connection info -->
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-top:auto;">
+        <div class="officer-info" id="officerInfo">SECURITY POST — GATE 1</div>
+        <div class="conn-badge online" id="connBadge">
+          <div class="dot"></div>
+          SERVER CONNECTED
+        </div>
+      </div>
+
+    </div>
+
+    <!-- RIGHT PANEL - LOG -->
+    <div class="right-panel">
+      <div class="log-header">
+        <div class="log-title">// TODAY'S LOG</div>
+        <div class="log-count" id="logCount">0 ENTRIES</div>
+      </div>
+
+      <div class="log-list" id="logList">
+        <div class="log-empty">
+          NO ENTRIES YET TODAY<br>
+          ——<br>
+          SCAN A DEVICE QR CODE<br>
+          TO BEGIN LOGGING
+        </div>
+      </div>
+
+      <div class="stats-bar">
+        <div class="stat-item ins">
+          <div class="stat-value" id="statIn">0</div>
+          <div class="stat-label">CHECK INS</div>
+        </div>
+        <div class="stat-item outs">
+          <div class="stat-value" id="statOut">0</div>
+          <div class="stat-label">CHECK OUTS</div>
+        </div>
+        <div class="stat-item denied-stat">
+          <div class="stat-value" id="statDenied">0</div>
+          <div class="stat-label">DENIED</div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    // ── CONFIG ─────────────────────────────────────────────────────
+    // Change this to your Flask server IP and port
+    // e.g., 'http://192.168.1.50:5001' if security PC is on the same network
+    const SERVER_URL = 'http://localhost:5001';
+
+    // ── STATE ──────────────────────────────────────────────────────
+    let currentMode = 'in';
+    let stats = { in: 0, out: 0, denied: 0 };
+    let logEntries = [];
+
+    // ── CLOCK ──────────────────────────────────────────────────────
+    function updateClock() {
+      const now = new Date();
+      document.getElementById('clock').textContent =
+        now.toTimeString().slice(0, 8);
+      document.getElementById('dateDisplay').textContent =
+        now.toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }).toUpperCase();
+    }
+    updateClock();
+    setInterval(updateClock, 1000);
+
+    // ── MODE ──────────────────────────────────────────────────────
+    function setMode(mode) {
+      currentMode = mode;
+      const ci = document.getElementById('btnCheckin');
+      const co = document.getElementById('btnCheckout');
+      const sb = document.getElementById('submitBtn');
+
+      ci.classList.toggle('active', mode === 'in');
+      co.classList.toggle('active', mode === 'out');
+
+      if (mode === 'out') {
+        sb.textContent = 'VERIFY & LOG EXIT';
+        sb.classList.add('checkout-mode');
+      } else {
+        sb.textContent = 'VERIFY & LOG ENTRY';
+        sb.classList.remove('checkout-mode');
+      }
+      clearResult();
+    }
+
+    // ── ENTER KEY ─────────────────────────────────────────────────
+    document.getElementById('scanInput').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') processQR();
+    });
+
+    // ── PROCESS SCAN ──────────────────────────────────────────────
+    async function processQR() {
+      const raw = document.getElementById('scanInput').value.trim();
+      if (!raw) {
+        showError('NO QR CODE', 'Please scan or enter a QR code first.');
+        return;
+      }
+
+      setLoading(true);
+
+      try {
+        const response = await fetch(`${SERVER_URL}/gate/scan`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            reg_id: raw,
+            action: currentMode,
+            officer: 'Security Officer'
+          })
+        });
+
+        const data = await response.json();
+        setLoading(false);
+        handleResult(data);
+
+      } catch (err) {
+        setLoading(false);
+        // ── OFFLINE / DEV MODE: simulate with fake data ──
+        handleResult(simulateScan(raw));
+      }
+
+      document.getElementById('scanInput').value = '';
+      document.getElementById('scanInput').focus();
+    }
+
+    // ── OFFLINE SIMULATION (remove in production) ─────────────────
+    function simulateScan(regId) {
+      if (regId.startsWith('BYOD-')) {
+        return {
+          ok: true,
+          name: 'Bamanga Mahan Bijat',
+          department: 'DLCR',
+          device: 'HP EliteBook',
+          serial: '9C0ASE91N',
+          reg_id: regId,
+          status: 'Approved',
+          action: currentMode,
+          time: new Date().toTimeString().slice(0,8),
+          date: new Date().toLocaleDateString('en-GB')
+        };
+      } else if (regId.toLowerCase() === 'denied') {
+        return { ok: false, reason: 'DEVICE NOT APPROVED', message: 'This device has not been approved by administration.' };
+      } else {
+        return { ok: false, reason: 'NOT FOUND', message: `No device registered with ID: ${regId}` };
+      }
+    }
+
+    // ── HANDLE RESULT ─────────────────────────────────────────────
+    function handleResult(data) {
+      if (data.ok) {
+        showSuccess(data);
+        playSound('success');
+        addLog(data, 'success');
+        stats[currentMode === 'in' ? 'in' : 'out']++;
+      } else {
+        showDenied(data);
+        playSound('denied');
+        addLog({ name: data.reason || 'UNKNOWN', reg_id: '—', device: '—', department: '—' }, 'denied');
+        stats.denied++;
+      }
+      updateStats();
+    }
+
+    function showSuccess(data) {
+      const card = document.getElementById('resultCard');
+      card.className = 'result-card success';
+      document.getElementById('resultIcon').textContent = currentMode === 'in' ? '✓' : '↑';
+      document.getElementById('resultTitle').textContent =
+        currentMode === 'in' ? 'ACCESS GRANTED — CHECK IN' : 'EXIT AUTHORISED — CHECK OUT';
+      document.getElementById('resultSubtitle').textContent =
+        `Logged at ${data.time || new Date().toTimeString().slice(0,8)}`;
+
+      document.getElementById('resultGrid').innerHTML = `
+        <div class="result-field">
+          <div class="field-label">FULL NAME</div>
+          <div class="field-value">${data.name}</div>
+        </div>
+        <div class="result-field">
+          <div class="field-label">DEPARTMENT</div>
+          <div class="field-value">${data.department}</div>
+        </div>
+        <div class="result-field">
+          <div class="field-label">DEVICE</div>
+          <div class="field-value">${data.device}</div>
+        </div>
+        <div class="result-field">
+          <div class="field-label">SERIAL NO.</div>
+          <div class="field-value">${data.serial}</div>
+        </div>
+        <div class="result-field wide">
+          <div class="field-label">REGISTRATION ID</div>
+          <div class="field-value" style="font-family:var(--mono); color:var(--green);">${data.reg_id}</div>
+        </div>
+        <div class="result-field">
+          <div class="field-label">APPROVAL STATUS</div>
+          <div class="field-value">
+            <span class="result-badge badge-approved">● APPROVED</span>
+          </div>
+        </div>
+        <div class="result-field">
+          <div class="field-label">ACTION</div>
+          <div class="field-value">${currentMode === 'in' ? '↓ CHECKED IN' : '↑ CHECKED OUT'}</div>
+        </div>
+      `;
+    }
+
+    function showDenied(data) {
+      const card = document.getElementById('resultCard');
+      card.className = 'result-card ' + (data.reason === 'NOT FOUND' ? 'error' : 'warning');
+      document.getElementById('resultIcon').textContent = '✕';
+      document.getElementById('resultTitle').textContent = data.reason || 'ACCESS DENIED';
+      document.getElementById('resultSubtitle').textContent = data.message || 'Device not authorised to enter.';
+      document.getElementById('resultGrid').innerHTML = `
+        <div class="result-field wide">
+          <div class="field-label">REASON</div>
+          <div class="field-value" style="color:var(--amber)">${data.message}</div>
+        </div>
+        <div class="result-field wide">
+          <div class="field-label">ACTION REQUIRED</div>
+          <div class="field-value">Contact IT department or BYOD administrator.</div>
+        </div>
+      `;
+    }
+
+    function showError(title, msg) {
+      const card = document.getElementById('resultCard');
+      card.className = 'result-card error';
+      document.getElementById('resultIcon').textContent = '!';
+      document.getElementById('resultTitle').textContent = title;
+      document.getElementById('resultSubtitle').textContent = msg;
+      document.getElementById('resultGrid').innerHTML = '';
+    }
+
+    function clearResult() {
+      document.getElementById('resultCard').className = 'result-card';
+    }
+
+    // ── LOG ───────────────────────────────────────────────────────
+    function addLog(data, type) {
+      const now = new Date();
+      const entry = {
+        name: data.name,
+        regId: data.reg_id,
+        device: data.device,
+        dept: data.department,
+        type,
+        action: type === 'denied' ? 'DENIED' : (currentMode === 'in' ? 'IN' : 'OUT'),
+        time: now.toTimeString().slice(0, 8)
+      };
+      logEntries.unshift(entry);
+      renderLog();
+    }
+
+    function renderLog() {
+      const list = document.getElementById('logList');
+      if (logEntries.length === 0) {
+        list.innerHTML = '<div class="log-empty">NO ENTRIES YET TODAY<br>——<br>SCAN A DEVICE QR CODE<br>TO BEGIN LOGGING</div>';
+        return;
+      }
+      list.innerHTML = logEntries.map(e => `
+        <div class="log-entry ${e.type === 'denied' ? 'denied' : e.action === 'IN' ? 'in' : 'out'}">
+          <div class="log-entry-top">
+            <span class="log-name">${e.name}</span>
+            <span class="log-action">${e.action}</span>
+          </div>
+          <div class="log-meta">
+            <span>${e.time}</span>
+            <span>${e.device}</span>
+            <span style="font-family:var(--mono); color:var(--muted)">${e.regId}</span>
+          </div>
+        </div>
+      `).join('');
+      document.getElementById('logCount').textContent = `${logEntries.length} ENTR${logEntries.length === 1 ? 'Y' : 'IES'}`;
+    }
+
+    // ── STATS ─────────────────────────────────────────────────────
+    function updateStats() {
+      document.getElementById('statIn').textContent = stats.in;
+      document.getElementById('statOut').textContent = stats.out;
+      document.getElementById('statDenied').textContent = stats.denied;
+    }
+
+    // ── LOADING ───────────────────────────────────────────────────
+    function setLoading(on) {
+      document.getElementById('spinner').style.display = on ? 'block' : 'none';
+      document.getElementById('submitBtn').disabled = on;
+    }
+
+    // ── SOUND ─────────────────────────────────────────────────────
+    function playSound(type) {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const wave = document.getElementById('soundWave');
+
+        if (type === 'success') {
+          // Two ascending beeps
+          [0, 150].forEach((delay, i) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.frequency.value = i === 0 ? 880 : 1100;
+            osc.type = 'sine';
+            gain.gain.setValueAtTime(0.15, ctx.currentTime + delay/1000);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay/1000 + 0.2);
+            osc.start(ctx.currentTime + delay/1000);
+            osc.stop(ctx.currentTime + delay/1000 + 0.2);
+          });
+          wave.style.cssText = 'display:flex; gap:3px; align-items:center; height:20px;';
+          setTimeout(() => { wave.style.display = 'none'; }, 600);
+        } else {
+          // Single low buzz
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.frequency.value = 220;
+          osc.type = 'square';
+          gain.gain.setValueAtTime(0.1, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+          osc.start(ctx.currentTime);
+          osc.stop(ctx.currentTime + 0.4);
+        }
+      } catch(e) {}
+    }
+
+    // ── CONNECTION CHECK ──────────────────────────────────────────
+    async function checkConnection() {
+      try {
+        const r = await fetch(`${SERVER_URL}/gate/ping`, { method: 'GET' });
+        const badge = document.getElementById('connBadge');
+        badge.className = r.ok ? 'conn-badge online' : 'conn-badge offline';
+        badge.innerHTML = `<div class="dot"></div>${r.ok ? 'SERVER CONNECTED' : 'SERVER ERROR'}`;
+      } catch {
+        const badge = document.getElementById('connBadge');
+        badge.className = 'conn-badge offline';
+        badge.innerHTML = '<div class="dot"></div>OFFLINE — SIMULATION MODE';
+      }
+    }
+    checkConnection();
+    setInterval(checkConnection, 30000);
+
+    // ── INIT ──────────────────────────────────────────────────────
+    document.getElementById('scanInput').focus();
+  </script>
+</body>
+</html>
