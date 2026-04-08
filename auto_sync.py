@@ -187,24 +187,21 @@ class GoogleSheetsAutoSync:
                 
                 if new_count > 0:
                     print(f"✓ Synced {new_count} new response(s)")
-                    print("Running automation...")
-                    
-                    # Run the BYOD automation
-                    import subprocess
-                    print("\nRunning BYOD Automation...")
-                    try:
-                        # Import and run directly (no subprocess issues!)
-                        from byod_automation import BYODAutomation
-
-                        automation = BYODAutomation('NITDA_BYOD_Database.xlsx')
-                        automation.run_automation()
-
-                        print("✓ Automation completed\n")
-                    except Exception as e:
-                        print(f"✗ Error: {e}\n")
-                
                 else:
                     print("  No new responses")
+                
+                # Always run automation to process approvals and completions
+                print("\nRunning BYOD Automation...")
+                try:
+                    # Import and run directly (no subprocess issues!)
+                    from byod_automation import BYODAutomation
+
+                    automation = BYODAutomation('NITDA_BYOD_Database.xlsx')
+                    automation.run_automation()
+
+                    print("✓ Automation completed\n")
+                except Exception as e:
+                    print(f"✗ Error: {e}\n")
                 
                 # Wait before next check
                 time.sleep(interval)
@@ -225,12 +222,14 @@ def setup_google_sheets_api():
     
     print("""
 This script requires a Google Service Account to access Google Sheets.
+if you want to use the script, just follow the instructions below in your own PC.
+.[=]
 
 STEP 1: Create Google Cloud Project
 ------------------------------------
 1. Go to: https://console.cloud.google.com
 2. Click "Select a project" → "New Project"
-3. Name: "NITDA BYOD System"
+3. Name: "whatever name you want"
 4. Click "Create"
 
 STEP 2: Enable Google Sheets API
