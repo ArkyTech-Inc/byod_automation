@@ -1,3 +1,5 @@
 NITDA_BYOD_Database.xlsx
 credentials.json
 .env
+qr_codes
+__pycache__
