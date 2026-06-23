@@ -7,18 +7,19 @@ This script automates the device registration workflow:
 4. Schedules IT inspections
 """
 import os
+from dotenv import load_dotenv
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import openpyxl
 import qrcode
 import smtplib
 import json
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
 from datetime import datetime, timedelta
 from io import BytesIO
-import os
+
+# Load environment variables from .env file (SECURITY: P0 - Externalize credentials)
+load_dotenv()
 
 class BYODAutomation:
     def __init__(self, excel_file):
@@ -67,13 +68,13 @@ class BYODAutomation:
                 msg.attach(attachment)
             
             # Connect to SMTP server
-            #server = smtplib.SMTP(self.smtp_server, self.smtp_port) --previous smtp connection code
-            #server.starttls() --previous smtp connection code before changing to port 465
             server = smtplib.SMTP_SSL(self.smtp_server, 465, timeout=15)
             
-            # Note: In production, use secure credential storage
-            #Note: The password used here is from my google app password to link gmail.
-            server.login(self.sender_email, "mvkd inaq hsyi kqnx")
+            # Load password from .env file (SECURITY: P0 - Never hardcode credentials)
+            google_app_password = os.getenv('Google_App_Password')
+            if not google_app_password:
+                raise ValueError("Google_App_Password not found in .env file")
+            server.login(self.sender_email, google_app_password)
             
             server.send_message(msg)
             server.quit()
@@ -94,34 +95,42 @@ class BYODAutomation:
                 continue
             
             status = row[14].value  # Status column
-            admin_remarks = row[17].value #admin remarks colum in the excel spreadsheet
-            # Check if confirmation email needs to be sent
-            if status == 'Pending' or not status and admin_remarks != 'Emails Sent':
-                # Get template
-                template = self.get_email_template('Registration Confirmation')
-                
-                # Format email
-                email_body = template['body'].format(
-                    name=row[2].value,
-                    registration_id=reg_id,
-                    device_model=row[6].value,
-                    date=datetime.now().strftime('%Y-%m-%d  %H:%M:%S')
-                )
-                
-                subject = template['subject'].format(registration_id=reg_id)
-                
-                # Send to user
-                user_email = row[10].value
-                if user_email:
-                    self.send_email(user_email, subject, email_body)
-                
-                # Send supervisor approval request
-                self.send_supervisor_approval(row)
-
-                #Mark as emailed
-                row[17].value = 'Emails Sent' #This fills up admin row so it can skip when auto sync and not send mail multiple times
-                
-                processed_count += 1
+            admin_remarks = row[17].value  # admin remarks column in the excel spreadsheet
+            
+            # SECURITY FIX: P1 - Track email sent status to prevent duplicate emails
+            # Only send if emails haven't been sent AND (no status yet OR just became Pending)
+            emails_already_sent = admin_remarks == 'Emails Sent'
+            
+            if not emails_already_sent and (status == 'Pending' or not status):
+                try:
+                    # Get template
+                    template = self.get_email_template('Registration Confirmation')
+                    
+                    # Format email
+                    email_body = template['body'].format(
+                        name=row[2].value,
+                        registration_id=reg_id,
+                        device_model=row[6].value,
+                        date=datetime.now().strftime('%Y-%m-%d  %H:%M:%S')
+                    )
+                    
+                    subject = template['subject'].format(registration_id=reg_id)
+                    
+                    # Send to user
+                    user_email = row[10].value
+                    if user_email:
+                        self.send_email(user_email, subject, email_body)
+                    
+                    # Send supervisor approval request
+                    self.send_supervisor_approval(row)
+                    
+                    # Mark as emailed AFTER successful send
+                    row[17].value = 'Emails Sent'
+                    processed_count += 1
+                    
+                except Exception as e:
+                    print(f"Error processing registration {reg_id}: {e}")
+                    # Don't mark as sent if email failed - will retry next cycle
         
         return processed_count
  
@@ -319,10 +328,13 @@ class BYODAutomation:
             
             # Send email
             import smtplib
-            #server = smtplib.SMTP(self.smtp_server, self.smtp_port)
-            #server.starttls()
             server = smtplib.SMTP_SSL(self.smtp_server, 465, timeout=15)
-            server.login(self.sender_email, "mvkd inaq hsyi kqnx")
+            
+            # Load password from .env file (SECURITY: P0 - Never hardcode credentials)
+            google_app_password = os.getenv('Google_App_Password')
+            if not google_app_password:
+                raise ValueError("Google_App_Password not found in .env file")
+            server.login(self.sender_email, google_app_password)
             server.send_message(msg)
             server.quit()
             
@@ -548,24 +560,26 @@ Please contact the user at {row[10].value} to confirm inspection time.
         print("NITDA BYOD Automation System - Running")
         print("=" * 60)
         
-        # Process new registrations
-        print("\n1. Processing new registrations...")
-        new_regs = self.process_new_registrations()
-        print(f"   Processed {new_regs} new registrations")
-        
-        # Process approved devices
-        print("\n2. Processing approved devices...")
-        approved = self.process_approved_devices()
-        print(f"   Scheduled {approved} IT inspections")
-        
-        # Process compliant devices
-        print("\n3. Generating QR codes for compliant devices...")
-        qr_codes = self.process_compliant_devices()
-        print(f"   Generated {qr_codes} QR code passes")
-        
-        # Save changes
-        print("\n4. Saving changes...")
-        self.save_changes()
+        try:
+            # Process new registrations
+            print("\n1. Processing new registrations...")
+            new_regs = self.process_new_registrations()
+            print(f"   Processed {new_regs} new registrations")
+            
+            # Process approved devices
+            print("\n2. Processing approved devices...")
+            approved = self.process_approved_devices()
+            print(f"   Scheduled {approved} IT inspections")
+            
+            # Process compliant devices
+            print("\n3. Generating QR codes for compliant devices...")
+            qr_codes = self.process_compliant_devices()
+            print(f"   Generated {qr_codes} QR code passes")
+            
+        finally:
+            # SECURITY: P1 - Always save changes, even if errors occur (prevents email replay)
+            print("\n4. Saving changes...")
+            self.save_changes()
         
         print("\n" + "=" * 60)
         print("Automation completed successfully!")
