@@ -489,37 +489,48 @@
 
 <script>
   // ── CONFIG ────────────────────────────────────────────────────────
-  // Change to your server's LAN IP when deployed
   const SERVER_URL = 'http://localhost:5001';
+  const GATE_API_KEY = 'your-api-key-here';  // Set in header, or leave empty if disabled on server
+
+  // ── HELPERS ───────────────────────────────────────────────────────
+  
+  function escapeHtml(text) {
+    /**SECURITY: P1 - Prevent XSS by escaping HTML entities*/
+    const map = {
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+    };
+    return text.replace(/[&<>"']/g, m => map[m]);
+  }
 
   // ── STATE ─────────────────────────────────────────────────────────
-  let currentMode  = 'in';
-  let stats        = { in:0, out:0, denied:0 };
-  let logEntries   = [];
+  let currentMode = 'in';
+  let stats = { in: 0, out: 0, denied: 0 };
+  let logEntries = [];
   let cameraStream = null;
-  let scanLoopId   = null;
-  let lastCode     = '';
+  let scanLoopId = null;
+  let lastCode = '';
   let lastCodeTime = 0;
-  let cooldown     = false;
-  let facingMode   = 'environment';
+  let cooldown = false;
+  let facingMode = 'environment';
   let debounceTimer = null;
 
   // ── CLOCK ─────────────────────────────────────────────────────────
   function updateClock() {
     const n = new Date();
-    document.getElementById('clock').textContent = n.toTimeString().slice(0,8);
+    document.getElementById('clock').textContent = n.toTimeString().slice(0, 8);
     document.getElementById('dateDisplay').textContent =
-      n.toLocaleDateString('en-GB',{weekday:'long',day:'2-digit',month:'long',year:'numeric'}).toUpperCase();
+      n.toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }).toUpperCase();
   }
-  updateClock(); setInterval(updateClock, 1000);
+  updateClock();
+  setInterval(updateClock, 1000);
 
   // ── MODE ──────────────────────────────────────────────────────────
   function setMode(mode) {
     currentMode = mode;
-    document.getElementById('btnCheckin').classList.toggle('active', mode==='in');
-    document.getElementById('btnCheckout').classList.toggle('active', mode==='out');
+    document.getElementById('btnCheckin').classList.toggle('active', mode === 'in');
+    document.getElementById('btnCheckout').classList.toggle('active', mode === 'out');
     const btn = document.getElementById('camToggleBtn');
-    btn.classList.toggle('checkout-mode', mode==='out');
+    btn.classList.toggle('checkout-mode', mode === 'out');
     clearResult();
   }
 
@@ -534,7 +545,7 @@
 
     try {
       cameraStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode, width:{ideal:1280}, height:{ideal:720} },
+        video: { facingMode, width: { ideal: 1280 }, height: { ideal: 720 } },
         audio: false
       });
       const video = document.getElementById('cameraVideo');
@@ -548,25 +559,28 @@
 
       scanLoopId = requestAnimationFrame(scanFrame);
 
-    } catch(err) {
+    } catch (err) {
       setLoading(false);
       cameraStream = null;
       if (err.name === 'NotAllowedError') {
-        setCamStatus('err','PERMISSION DENIED');
-        showError('CAMERA BLOCKED', 'Please allow camera access in your browser, then refresh the page.');
-      } else if (err.name === 'NotFoundError') {
-        setCamStatus('err','NO CAMERA FOUND');
-        showError('NO CAMERA', 'No camera was detected. Use the manual input below instead.');
+        setCamStatus('err', 'PERMISSION DENIED');
+        showError('CAMERA BLOCKED', 'Please allow camera access in browser settings.');
       } else {
-        setCamStatus('err','CAMERA ERROR');
+        setCamStatus('err', 'CAMERA ERROR');
         showError('CAMERA ERROR', err.message);
       }
     }
   }
 
   function stopCamera() {
-    if (scanLoopId)   { cancelAnimationFrame(scanLoopId); scanLoopId = null; }
-    if (cameraStream) { cameraStream.getTracks().forEach(t=>t.stop()); cameraStream = null; }
+    if (scanLoopId) {
+      cancelAnimationFrame(scanLoopId);
+      scanLoopId = null;
+    }
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(t => t.stop());
+      cameraStream = null;
+    }
     document.getElementById('cameraVideo').srcObject = null;
     document.getElementById('camToggleBtn').textContent = 'START CAMERA';
     document.getElementById('camFlipBtn').style.display = 'none';
@@ -575,7 +589,8 @@
 
   async function flipCamera() {
     facingMode = facingMode === 'environment' ? 'user' : 'environment';
-    stopCamera(); await startCamera();
+    stopCamera();
+    await startCamera();
   }
 
   function setCamStatus(cls, text) {
@@ -586,23 +601,22 @@
 
   // ── QR SCAN LOOP ──────────────────────────────────────────────────
   function scanFrame() {
-    const video  = document.getElementById('cameraVideo');
+    const video = document.getElementById('cameraVideo');
     const canvas = document.getElementById('cameraCanvas');
 
     if (video.readyState === video.HAVE_ENOUGH_DATA && !cooldown) {
-      canvas.width  = video.videoWidth;
+      canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       const ctx = canvas.getContext('2d');
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-      const img  = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const code = jsQR(img.data, img.width, img.height, { inversionAttempts:'dontInvert' });
+      const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' });
 
       if (code && code.data) {
         const now = Date.now();
-        // same code must wait 4 seconds before re-triggering
         if (code.data !== lastCode || now - lastCodeTime > 4000) {
-          lastCode     = code.data;
+          lastCode = code.data;
           lastCodeTime = now;
           onQRDetected(code.data);
         }
@@ -627,13 +641,13 @@
   // ── MANUAL INPUT ──────────────────────────────────────────────────
   const scanInput = document.getElementById('scanInput');
 
-  scanInput.addEventListener('input', function() {
+  scanInput.addEventListener('input', function () {
     clearTimeout(debounceTimer);
     if (!this.value.trim()) return;
     debounceTimer = setTimeout(() => processRegID(this.value.trim()), 150);
   });
 
-  scanInput.addEventListener('keydown', function(e) {
+  scanInput.addEventListener('keydown', function (e) {
     if (e.key === 'Enter') {
       clearTimeout(debounceTimer);
       setTimeout(() => processRegID(this.value.trim()), 50);
@@ -643,84 +657,108 @@
   // ── CORE LOOKUP ───────────────────────────────────────────────────
   async function processRegID(raw) {
     scanInput.value = '';
-    if (!raw) { showError('EMPTY SCAN', 'No data received.'); return; }
+    if (!raw) {
+      showError('EMPTY SCAN', 'No data received.');
+      return;
+    }
+
+    // Validate format (basic check)
+    if (!/^[A-Z0-9\-]{6,50}$/.test(raw)) {
+      showError('INVALID FORMAT', 'Invalid registration ID format.');
+      return;
+    }
 
     setLoading(true);
 
     try {
-      const res  = await fetch(`${SERVER_URL}/gate/scan`, {
+      const res = await fetch(`${SERVER_URL}/gate/scan`, {
         method: 'POST',
-        headers: { 'Content-Type':'application/json' },
-        body: JSON.stringify({ reg_id:raw, action:currentMode, officer:'Security Officer' })
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': GATE_API_KEY
+        },
+        body: JSON.stringify({
+          reg_id: raw,
+          action: currentMode,
+          officer: 'Security Officer'
+        })
       });
+
       const data = await res.json();
       setLoading(false);
-      handleResult(data);
-    } catch(err) {
-      setLoading(false);
-      handleResult(simulateScan(raw)); // offline fallback
-    }
-  }
+      handleResult(data, res.status);
 
-  // ── OFFLINE SIMULATION ────────────────────────────────────────────
-  function simulateScan(regId) {
-    if (regId.startsWith('BYOD-')) {
-      return {
-        ok:true, reg_id:regId,
-        name:'Bamanga Mahan Bijat', department:'DLCR',
-        device:'HP EliteBook', serial:'9C0ASE91N', status:'Approved',
-        action:currentMode,
-        time:new Date().toTimeString().slice(0,8),
-        date:new Date().toLocaleDateString('en-GB')
-      };
+    } catch (err) {
+      setLoading(false);
+      showError('CONNECTION ERROR', 'Cannot reach server. Running in offline mode.');
+      playSound('denied');
+      // Don't process offline in strict mode - for security
     }
-    if (regId.toLowerCase() === 'denied')
-      return { ok:false, reason:'DEVICE NOT APPROVED', message:'This device has not been approved by administration.' };
-    return { ok:false, reason:'NOT FOUND', message:`No device registered with ID: ${regId}` };
   }
 
   // ── HANDLE RESULT ─────────────────────────────────────────────────
-  function handleResult(data) {
+  function handleResult(data, status) {
+    if (!data || typeof data !== 'object') {
+      showError('ERROR', 'Invalid response from server');
+      return;
+    }
+
+    if (status === 401 || status === 403) {
+      showError('AUTHENTICATION ERROR', data.message || 'Request unauthorized');
+      playSound('denied');
+      return;
+    }
+
+    if (status === 429) {
+      showError('RATE LIMITED', 'Too many requests. Please wait.');
+      playSound('denied');
+      return;
+    }
+
     if (data.ok) {
-      showSuccess(data); playSound('success');
+      showSuccess(data);
+      playSound('success');
       addLog(data, 'success');
       stats[currentMode === 'in' ? 'in' : 'out']++;
     } else {
-      showDenied(data); playSound('denied');
-      addLog({ name:data.reason||'UNKNOWN', reg_id:'—', device:'—', department:'—' }, 'denied');
+      showDenied(data);
+      playSound('denied');
+      addLog({ name: data.reason || 'UNKNOWN', reg_id: '—', device: '—', department: '—' }, 'denied');
       stats.denied++;
     }
+
     updateStats();
-    // scroll result into view on mobile
-    document.getElementById('resultCard').scrollIntoView({ behavior:'smooth', block:'nearest' });
+    document.getElementById('resultCard').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
   function showSuccess(data) {
     const card = document.getElementById('resultCard');
     card.className = 'result-card success';
-    document.getElementById('resultIcon').textContent    = currentMode==='in' ? '✓' : '↑';
-    document.getElementById('resultTitle').textContent   = currentMode==='in' ? 'ACCESS GRANTED — CHECK IN' : 'EXIT AUTHORISED — CHECK OUT';
-    document.getElementById('resultSubtitle').textContent = `Logged at ${data.time||new Date().toTimeString().slice(0,8)}`;
+    document.getElementById('resultIcon').textContent = currentMode === 'in' ? '✓' : '↑';
+    document.getElementById('resultTitle').textContent = currentMode === 'in' ? 'ACCESS GRANTED — CHECK IN' : 'EXIT AUTHORISED — CHECK OUT';
+    document.getElementById('resultSubtitle').textContent = `Logged at ${data.time || new Date().toTimeString().slice(0, 8)}`;
+
+    // SECURITY: Use textContent + escapeHtml for XSS prevention
     document.getElementById('resultGrid').innerHTML = `
       <div class="result-field">
         <div class="field-label">FULL NAME</div>
-        <div class="field-value">${data.name}</div>
+        <div class="field-value">${escapeHtml(data.name)}</div>
       </div>
       <div class="result-field">
         <div class="field-label">DEPARTMENT</div>
-        <div class="field-value">${data.department}</div>
+        <div class="field-value">${escapeHtml(data.department)}</div>
       </div>
       <div class="result-field">
         <div class="field-label">DEVICE</div>
-        <div class="field-value">${data.device}</div>
+        <div class="field-value">${escapeHtml(data.device)}</div>
       </div>
       <div class="result-field">
         <div class="field-label">SERIAL NO.</div>
-        <div class="field-value">${data.serial}</div>
+        <div class="field-value">${escapeHtml(data.serial)}</div>
       </div>
       <div class="result-field wide">
         <div class="field-label">REGISTRATION ID</div>
-        <div class="field-value" style="font-family:var(--mono);color:var(--green)">${data.reg_id}</div>
+        <div class="field-value" style="font-family:var(--mono);color:var(--green)">${escapeHtml(data.reg_id)}</div>
       </div>
       <div class="result-field">
         <div class="field-label">APPROVAL STATUS</div>
@@ -728,20 +766,20 @@
       </div>
       <div class="result-field">
         <div class="field-label">ACTION</div>
-        <div class="field-value">${currentMode==='in' ? '↓ CHECKED IN' : '↑ CHECKED OUT'}</div>
+        <div class="field-value">${currentMode === 'in' ? '↓ CHECKED IN' : '↑ CHECKED OUT'}</div>
       </div>`;
   }
 
   function showDenied(data) {
     const card = document.getElementById('resultCard');
-    card.className = 'result-card ' + (data.reason==='NOT FOUND' ? 'error' : 'warning');
-    document.getElementById('resultIcon').textContent    = '✕';
-    document.getElementById('resultTitle').textContent   = data.reason||'ACCESS DENIED';
-    document.getElementById('resultSubtitle').textContent = data.message||'Device not authorised.';
+    card.className = 'result-card ' + (data.reason === 'NOT_FOUND' ? 'error' : 'warning');
+    document.getElementById('resultIcon').textContent = '✕';
+    document.getElementById('resultTitle').textContent = escapeHtml(data.reason) || 'ACCESS DENIED';
+    document.getElementById('resultSubtitle').textContent = escapeHtml(data.message) || 'Device not authorised.';
     document.getElementById('resultGrid').innerHTML = `
       <div class="result-field wide">
         <div class="field-label">REASON</div>
-        <div class="field-value" style="color:var(--amber)">${data.message}</div>
+        <div class="field-value" style="color:var(--amber)">${escapeHtml(data.message)}</div>
       </div>
       <div class="result-field wide">
         <div class="field-label">ACTION REQUIRED</div>
@@ -752,9 +790,9 @@
   function showError(title, msg) {
     const card = document.getElementById('resultCard');
     card.className = 'result-card error';
-    document.getElementById('resultIcon').textContent    = '!';
-    document.getElementById('resultTitle').textContent   = title;
-    document.getElementById('resultSubtitle').textContent = msg;
+    document.getElementById('resultIcon').textContent = '!';
+    document.getElementById('resultTitle').textContent = escapeHtml(title);
+    document.getElementById('resultSubtitle').textContent = escapeHtml(msg);
     document.getElementById('resultGrid').innerHTML = '';
   }
 
@@ -765,12 +803,12 @@
   // ── LOG ───────────────────────────────────────────────────────────
   function addLog(data, type) {
     logEntries.unshift({
-      name:   data.name,
-      regId:  data.reg_id,
+      name: data.name,
+      regId: data.reg_id,
       device: data.device,
       type,
-      action: type==='denied' ? 'DENIED' : (currentMode==='in' ? 'IN' : 'OUT'),
-      time:   new Date().toTimeString().slice(0,8)
+      action: type === 'denied' ? 'DENIED' : (currentMode === 'in' ? 'IN' : 'OUT'),
+      time: new Date().toTimeString().slice(0, 8)
     });
     renderLog();
   }
@@ -781,26 +819,27 @@
       list.innerHTML = '<div class="log-empty">NO ENTRIES YET TODAY<br>——<br>START CAMERA AND SCAN<br>A DEVICE QR CODE</div>';
       return;
     }
+
     list.innerHTML = logEntries.map(e => `
-      <div class="log-entry ${e.type==='denied'?'denied':e.action==='IN'?'in':'out'}">
+      <div class="log-entry ${e.type === 'denied' ? 'denied' : e.action === 'IN' ? 'in' : 'out'}">
         <div class="log-entry-top">
-          <span class="log-name">${e.name}</span>
+          <span class="log-name">${escapeHtml(e.name)}</span>
           <span class="log-action">${e.action}</span>
         </div>
         <div class="log-meta">
           <span>${e.time}</span>
-          <span>${e.device}</span>
-          <span>${e.regId}</span>
+          <span>${escapeHtml(e.device)}</span>
+          <span>${escapeHtml(e.regId)}</span>
         </div>
       </div>`).join('');
-    document.getElementById('logCount').textContent =
-      `${logEntries.length} ENTR${logEntries.length===1?'Y':'IES'}`;
+
+    document.getElementById('logCount').textContent = `${logEntries.length} ENTR${logEntries.length === 1 ? 'Y' : 'IES'}`;
   }
 
   // ── STATS ─────────────────────────────────────────────────────────
   function updateStats() {
-    document.getElementById('statIn').textContent     = stats.in;
-    document.getElementById('statOut').textContent    = stats.out;
+    document.getElementById('statIn').textContent = stats.in;
+    document.getElementById('statOut').textContent = stats.out;
     document.getElementById('statDenied').textContent = stats.denied;
   }
 
@@ -814,45 +853,57 @@
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
       if (type === 'beep') {
-        const o=ctx.createOscillator(), g=ctx.createGain();
-        o.connect(g); g.connect(ctx.destination);
-        o.frequency.value=1200; o.type='sine';
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.connect(g);
+        g.connect(ctx.destination);
+        o.frequency.value = 1200;
+        o.type = 'sine';
         g.gain.setValueAtTime(0.1, ctx.currentTime);
-        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+0.1);
-        o.start(ctx.currentTime); o.stop(ctx.currentTime+0.1);
+        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
+        o.start(ctx.currentTime);
+        o.stop(ctx.currentTime + 0.1);
       } else if (type === 'success') {
-        [880,1100].forEach((freq,i)=>{
-          const o=ctx.createOscillator(), g=ctx.createGain();
-          o.connect(g); g.connect(ctx.destination);
-          o.frequency.value=freq; o.type='sine';
-          const t=ctx.currentTime+i*0.15;
-          g.gain.setValueAtTime(0.15,t);
-          g.gain.exponentialRampToValueAtTime(0.001,t+0.2);
-          o.start(t); o.stop(t+0.2);
+        [880, 1100].forEach((freq, i) => {
+          const o = ctx.createOscillator(), g = ctx.createGain();
+          o.connect(g);
+          g.connect(ctx.destination);
+          o.frequency.value = freq;
+          o.type = 'sine';
+          const t = ctx.currentTime + i * 0.15;
+          g.gain.setValueAtTime(0.15, t);
+          g.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+          o.start(t);
+          o.stop(t + 0.2);
         });
       } else {
-        const o=ctx.createOscillator(), g=ctx.createGain();
-        o.connect(g); g.connect(ctx.destination);
-        o.frequency.value=220; o.type='square';
-        g.gain.setValueAtTime(0.1,ctx.currentTime);
-        g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.45);
-        o.start(ctx.currentTime); o.stop(ctx.currentTime+0.45);
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.connect(g);
+        g.connect(ctx.destination);
+        o.frequency.value = 220;
+        o.type = 'square';
+        g.gain.setValueAtTime(0.1, ctx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
+        o.start(ctx.currentTime);
+        o.stop(ctx.currentTime + 0.45);
       }
-    } catch(e){}
+    } catch (e) { }
   }
 
   // ── CONNECTION CHECK ──────────────────────────────────────────────
   async function checkConnection() {
     const badge = document.getElementById('connBadge');
     try {
-      const r = await fetch(`${SERVER_URL}/gate/ping`);
+      const r = await fetch(`${SERVER_URL}/gate/ping`, {
+        headers: { 'X-API-Key': GATE_API_KEY }
+      });
       badge.className = r.ok ? 'conn-badge online' : 'conn-badge offline';
       badge.innerHTML = `<div class="dot"></div>${r.ok ? 'SERVER CONNECTED' : 'SERVER ERROR'}`;
     } catch {
       badge.className = 'conn-badge offline';
-      badge.innerHTML = '<div class="dot"></div>OFFLINE — SIMULATION MODE';
+      badge.innerHTML = '<div class="dot"></div>OFFLINE MODE';
     }
   }
+
   checkConnection();
   setInterval(checkConnection, 30000);
 </script>
