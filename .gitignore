@@ -1,5 +1,8 @@
-NITDA_BYOD_Database.xlsx
+byod_system.db
+byod_system.db-wal
+byod_system.db-shm
 credentials.json
 .env
-qr_codes
-__pycache__
+qr_codes/
+__pycache__/
+*.xlsx

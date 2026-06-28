@@ -1,37 +1,23 @@
-blinker==1.9.0
-certifi==2026.1.4
-cffi==2.0.0
-charset-normalizer==3.4.4
-click==8.3.1
-colorama==0.4.6
-cryptography==46.0.4
-et_xmlfile==2.0.0
-Flask==3.1.2
-flask-cors==6.0.2
-google-auth==2.48.0
-google-auth-oauthlib==1.2.4
-gspread==6.2.1
-idna==3.11
-itsdangerous==2.2.0
-jaraco.classes==3.4.0
-jaraco.context==6.1.2
-jaraco.functools==4.4.0
-Jinja2==3.1.6
-keyring==25.7.0
-MarkupSafe==3.0.3
-more-itertools==11.0.1
-oauthlib==3.3.1
-openpyxl==3.1.5
-pillow==12.1.0
-pyasn1==0.6.2
-pyasn1_modules==0.4.2
-pycparser==3.0
-python-dotenv==1.2.2
-pywin32-ctypes==0.2.3
-qrcode==8.2
-requests==2.32.5
-requests-oauthlib==2.0.0
-rsa==4.9.1
-urllib3==2.6.3
-watchdog>=6.0.0
-Werkzeug==3.1.5
+# NITDA BYOD System - Python Dependencies
+# Install with: pip install -r requirements.txt
+
+# Web Framework
+Flask==3.0.0
+Werkzeug==3.0.1
+
+# Supabase Client
+supabase==2.31.0
+
+# Email and Security
+python-dotenv==1.0.0
+
+# QR Code Generation
+qrcode==7.4.2
+Pillow==12.2.0
+
+# Database Drivers (for optional local database)
+psycopg2-binary==2.9.12
+
+# Utilities
+requests==2.31.0
+urllib3==2.0.7
