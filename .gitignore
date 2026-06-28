@@ -6,3 +6,5 @@ credentials.json
 qr_codes/
 __pycache__/
 *.xlsx
+credentials.json
+byod.pem
